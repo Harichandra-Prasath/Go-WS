@@ -54,13 +54,25 @@ func (S *WebSocketServer) Start() error {
 func (S *WebSocketServer) handleConn(conn *net.TCPConn) {
 	err := handleHandShake(conn)
 	if err != nil {
-		fmt.Printf("Error in handleHandShake: %s", err)
-		fmt.Println("Closing the Connection")
+		fmt.Printf("Error in handleHandShake: %s\n", err)
+		fmt.Printf("Closing the %s Connection at %s\n", conn.RemoteAddr().Network(), conn.RemoteAddr().String())
 		conn.Close()
 		return
 	}
 
 	for {
+
+		buff := make([]byte, 1024)
+		n, err := conn.Read(buff)
+		if err != nil {
+			fmt.Printf("Error in Reading Message: %s\n", err)
+			return
+		}
+
+		err = handleMessage(buff[:n])
+		if err != nil {
+			fmt.Printf("Error in handling Mesasge: %s\n", err)
+		}
 
 	}
 }

@@ -28,6 +28,7 @@ func handleHandShake(conn *net.TCPConn) error {
 	err = parseHandShake(string(buff[:n]), &headerMap)
 	if err != nil {
 		writeStatusLine("400", "Bad Request", buffer)
+		buffer.WriteString("\r\n")
 		conn.Write(buffer.Bytes())
 		return fmt.Errorf("error in parseHandShake: %s", err)
 	}
@@ -139,13 +140,6 @@ func writeHandShake(_headerMap *map[string]string, buff *bytes.Buffer) []byte {
 	respHeaderMap["Connection"] = "Upgrade"
 	respHeaderMap["Sec-WebSocket-Accept"] = Accept_key
 
-	Optional := []string{"Sec-WebSocket-Protocol", "Sec-WebSocket-Extensions"}
-	for _, field := range Optional {
-		if _, ok := headerMap[field]; ok {
-			respHeaderMap[field] = headerMap[field]
-		}
-	}
-
 	writeHeaders(&respHeaderMap, buff)
 	buff.WriteString("\r\n")
 
@@ -163,6 +157,7 @@ func writeStatusLine(status string, text string, buff *bytes.Buffer) {
 
 }
 
+// For given Headers, Write it to the buffer for final conn write
 func writeHeaders(_headerMap *map[string]string, buff *bytes.Buffer) {
 
 	headerMap := *(_headerMap)
