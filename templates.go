@@ -1,15 +1,5 @@
 package gows
 
-import "bytes"
-
-func invalidHandshake() []byte {
-
-	buff := &bytes.Buffer{}
-
-	buff.WriteString("HTTP/1.1 400")
-	buff.WriteByte(' ')
-	buff.WriteString("Bad Request")
-	buff.WriteString("\r\n")
-
-	return buff.Bytes()
-}
+const (
+	ACCEPT_STRING = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+)

@@ -1,42 +1,60 @@
 package gows
 
 import (
+	"bytes"
+	"crypto/sha1"
 	"encoding/base64"
 	"fmt"
 	"net"
 	"strings"
 )
 
+var hasher = sha1.New()
+
 // Handles the Initial Handshake parsing the headers
 func handleHandShake(conn *net.TCPConn) error {
 
 	// Read the Initial Handshake
 	buff := make([]byte, 1024)
+	buffer := &bytes.Buffer{}
 
 	n, err := conn.Read(buff)
 	if err != nil {
 		return fmt.Errorf("reading handshake: %s", err)
 	}
 
-	err = parseHandShake(string(buff[:n]))
+	headerMap := make(map[string]string)
+
+	err = parseHandShake(string(buff[:n]), &headerMap)
 	if err != nil {
-		return fmt.Errorf("parsing handshake: %s", err)
+		writeStatusLine("400", "Bad Request", buffer)
+		conn.Write(buffer.Bytes())
+		return fmt.Errorf("error in parseHandShake: %s", err)
 	}
 
 	fmt.Println("HandShaked Parsed and found to be Valid")
 
+	respData := writeHandShake(&headerMap, buffer)
+
+	_, err = conn.Write(respData)
+	if err != nil {
+		return fmt.Errorf("sending server handshake: %s", err)
+	}
+
+	fmt.Println("Wrote Server Handshake back")
+
 	return nil
 }
 
-// Parse the HandShake
-func parseHandShake(data string) error {
+// Parser for Initial HandShake
+func parseHandShake(data string, _headerMap *map[string]string) error {
+
+	headerMap := *(_headerMap)
 
 	// Get the headers
 	_headers := strings.Split(data, "\r\n")
 
 	l := len(_headers)
-
-	headerMap := make(map[string]string)
 
 	request_line := _headers[0]
 
@@ -54,13 +72,13 @@ func parseHandShake(data string) error {
 
 	}
 
-	if err := checkHeader("Upgrade", "websocket", &headerMap); err != nil {
+	if err := checkHeader("Upgrade", "websocket", _headerMap); err != nil {
 		return err
 	}
-	if err := checkHeader("Connection", "Upgrade", &headerMap); err != nil {
+	if err := checkHeader("Connection", "Upgrade", _headerMap); err != nil {
 		return err
 	}
-	if err := checkHeader("Sec-WebSocket-Version", "13", &headerMap); err != nil {
+	if err := checkHeader("Sec-WebSocket-Version", "13", _headerMap); err != nil {
 		return err
 	}
 
@@ -80,6 +98,7 @@ func parseHandShake(data string) error {
 	return nil
 }
 
+// Checks against expected value for the given header
 func checkHeader(key string, expected string, _headerMap *map[string]string) error {
 
 	headerMap := *(_headerMap)
@@ -94,5 +113,65 @@ func checkHeader(key string, expected string, _headerMap *map[string]string) err
 	}
 
 	return nil
+
+}
+
+// Sends server Handshake to the client
+func writeHandShake(_headerMap *map[string]string, buff *bytes.Buffer) []byte {
+
+	headerMap := *(_headerMap)
+
+	writeStatusLine("101", "Switching Protocols", buff)
+
+	// Prepare the Sec-WebSocket-Accept
+	key := headerMap["Sec-WebSocket-Key"]
+	key += ACCEPT_STRING
+
+	hasher.Write([]byte(key))
+
+	Accept_key := base64.StdEncoding.EncodeToString(hasher.Sum(nil))
+
+	// Prepare the response headers
+
+	respHeaderMap := make(map[string]string)
+
+	respHeaderMap["Upgrade"] = "websocket"
+	respHeaderMap["Connection"] = "Upgrade"
+	respHeaderMap["Sec-WebSocket-Accept"] = Accept_key
+
+	Optional := []string{"Sec-WebSocket-Protocol", "Sec-WebSocket-Extensions"}
+	for _, field := range Optional {
+		if _, ok := headerMap[field]; ok {
+			respHeaderMap[field] = headerMap[field]
+		}
+	}
+
+	writeHeaders(&respHeaderMap, buff)
+	buff.WriteString("\r\n")
+
+	return buff.Bytes()
+
+}
+
+// Write the statusLine for the responses
+func writeStatusLine(status string, text string, buff *bytes.Buffer) {
+
+	buff.WriteString(fmt.Sprintf("HTTP/1.1 %s", status))
+	buff.WriteByte(' ')
+	buff.WriteString(text)
+	buff.WriteString("\r\n")
+
+}
+
+func writeHeaders(_headerMap *map[string]string, buff *bytes.Buffer) {
+
+	headerMap := *(_headerMap)
+
+	for key, value := range headerMap {
+		buff.WriteString(fmt.Sprintf("%s:", key))
+		buff.WriteByte(' ')
+		buff.WriteString(value)
+		buff.WriteString("\r\n")
+	}
 
 }
