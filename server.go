@@ -54,7 +54,9 @@ func (S *WebSocketServer) Start() error {
 func (S *WebSocketServer) handleConn(conn *net.TCPConn) {
 	err := handleHandShake(conn)
 	if err != nil {
-		fmt.Println("handleHandShake:", err)
+		fmt.Println("Error in handleHandShake:", err)
+		conn.Write(invalidHandshake())
+		conn.Close()
 		return
 	}
 }
