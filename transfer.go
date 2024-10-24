@@ -7,21 +7,21 @@ import (
 )
 
 // Handles the Message Frame
-func handleMessage(buff []byte) error {
+func handleMessage(buff []byte) ([]byte, error) {
 
 	i := 0
 
 	FIN_OPCODE_BYTE := buff[i]
 
 	if !checkBit(FIN_OPCODE_BYTE, 7) {
-		return fmt.Errorf("fin not set to 1 (fragmeneted)")
+		return nil, fmt.Errorf("fin not set to 1 (fragmeneted)")
 	}
 	i += 1
 
 	MASK_LEN_BYTE := buff[i]
 
 	if !checkBit(MASK_LEN_BYTE, 7) {
-		return fmt.Errorf("message frames has to be masked from client")
+		return nil, fmt.Errorf("message frames has to be masked from client")
 	}
 
 	payload_len := int(MASK_LEN_BYTE & 0b01111111)
@@ -54,9 +54,7 @@ func handleMessage(buff []byte) error {
 		res.WriteByte(c)
 	}
 
-	fmt.Println("Recieved Data:", res.String())
-
-	return nil
+	return res.Bytes(), nil
 }
 
 func checkBit(b byte, position int) bool {
