@@ -1,9 +1,9 @@
 package gows
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
-	"strconv"
 )
 
 // Handles the Message Frame
@@ -11,26 +11,27 @@ func handleMessage(buff []byte) error {
 
 	i := 0
 
-	FIN_OPCODE_BYTE := fmt.Sprintf("%b", buff[i])
-	i += 1
+	FIN_OPCODE_BYTE := buff[i]
 
-	if FIN_OPCODE_BYTE[0] != '1' {
+	if !checkBit(FIN_OPCODE_BYTE, 7) {
 		return fmt.Errorf("fin not set to 1 (fragmeneted)")
 	}
+	i += 1
 
-	MASK_LEN_BYTE := fmt.Sprintf("%b", buff[i])
+	MASK_LEN_BYTE := buff[i]
 
-	if MASK_LEN_BYTE[0] != '1' {
+	if !checkBit(MASK_LEN_BYTE, 7) {
 		return fmt.Errorf("message frames has to be masked from client")
 	}
 
-	payload_len, _ := strconv.ParseInt(MASK_LEN_BYTE[i:], 2, 64)
+	payload_len := int(MASK_LEN_BYTE & 0b01111111)
 
 	if payload_len < 126 {
 		fmt.Println("Got a Payload with len", payload_len)
 		i += 1
 	} else if payload_len == 126 {
-		x := uint16(buff[i+1])<<8 | uint16(buff[i+2])
+		_bytes := buff[i+1 : i+3]
+		x := binary.BigEndian.Uint16(_bytes)
 		i += 3
 		fmt.Println("Got a Payload with len", x)
 	} else {
@@ -46,14 +47,20 @@ func handleMessage(buff []byte) error {
 
 	data_buff := buff[i:]
 
-	var decoded_data []byte
+	res := &bytes.Buffer{}
 
 	for i, data := range data_buff {
 		c := data ^ Mask[i%4]
-		decoded_data = append(decoded_data, c)
+		res.WriteByte(c)
 	}
 
-	fmt.Print("Recieved Data: ", string(decoded_data))
+	fmt.Println("Recieved Data:", res.String())
 
 	return nil
+}
+
+func checkBit(b byte, position int) bool {
+
+	return (b & (1 << position)) != 0
+
 }
