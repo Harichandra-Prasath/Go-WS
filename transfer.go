@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"math"
 )
+
+const COMPLETE_TEXT_BYTE = 0b10000001
 
 // Handles the Message Frame
 func handleMessage(buff []byte) ([]byte, error) {
@@ -55,6 +58,49 @@ func handleMessage(buff []byte) ([]byte, error) {
 	}
 
 	return res.Bytes(), nil
+}
+
+func prepareMessage(data []byte) ([]byte, error) {
+
+	// working with complete message and utf-8 text
+	message := &bytes.Buffer{}
+	message.WriteByte(COMPLETE_TEXT_BYTE)
+
+	// Set the lenght of the payload
+	l := len(data)
+
+	// Server messages need not to be masked
+	if l <= 125 {
+		message.WriteByte(byte(l))
+	} else if l < int(math.Pow(2, 16)) {
+		message.WriteByte(126)
+
+		// put it in two bytes
+		_len := make([]byte, 2)
+		binary.BigEndian.PutUint16(_len, uint16(l))
+
+		message.Write(_len)
+
+	} else {
+
+		message.WriteByte(127)
+
+		// Put it in eight bytes
+		_len := make([]byte, 8)
+		binary.BigEndian.PutUint64(_len, uint64(l))
+
+		message.Write(_len)
+
+	}
+
+	// Can skip the mask part and write the payload
+	_, err := message.Write(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return message.Bytes(), nil
+
 }
 
 func checkBit(b byte, position int) bool {

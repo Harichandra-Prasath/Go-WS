@@ -38,7 +38,8 @@ type WebSocketServer struct {
 func NewWebSocketServer(cfg ServerConfig) *WebSocketServer {
 
 	return &WebSocketServer{
-		config: cfg,
+		config:     cfg,
+		acceptChan: make(chan AcceptPacket, 1),
 	}
 
 }
@@ -66,6 +67,21 @@ func (S *WebSocketServer) Accept() (*WsConn, error) {
 func (ws *WsConn) Read() ([]byte, error) {
 	msgpacket := <-ws.ouputChan
 	return msgpacket.message, msgpacket.err
+}
+
+func (ws *WsConn) Write(data []byte) error {
+
+	message, err := prepareMessage(data)
+	if err != nil {
+		return fmt.Errorf("preparingMessage: %s", err)
+	}
+
+	_, err = ws.conn.Write(message)
+	if err != nil {
+		return fmt.Errorf("writing to socket: %s", err)
+	}
+	return nil
+
 }
 
 func accpetConn(S *WebSocketServer, _listener net.Listener) {
@@ -97,7 +113,7 @@ func accpetConn(S *WebSocketServer, _listener net.Listener) {
 
 		wsconn := WsConn{
 			conn:      tcpConn,
-			ouputChan: make(chan MessagePacket),
+			ouputChan: make(chan MessagePacket, 1),
 		}
 
 		S.acceptChan <- AcceptPacket{
@@ -115,7 +131,7 @@ func handleConn(wsconn *WsConn) {
 	tcpConn := wsconn.conn
 
 	buffer := &bytes.Buffer{}
-	buff_size := 1024
+	buff_size := 2
 
 	for {
 		buff := make([]byte, buff_size)
@@ -126,11 +142,9 @@ func handleConn(wsconn *WsConn) {
 		}
 		buffer.Write(buff[:n])
 
-		fmt.Println(buffer.Bytes())
 		if n < buff_size {
 			// Got the Complete message
 
-			fmt.Println("Hi")
 			message, err := handleMessage(buffer.Bytes())
 			if err != nil {
 				fmt.Printf("Error in handling Mesasge: %s\n", err)
@@ -140,6 +154,8 @@ func handleConn(wsconn *WsConn) {
 				message: message,
 				err:     err,
 			}
+
+			buffer.Reset()
 
 		}
 
